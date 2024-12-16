@@ -1,6 +1,11 @@
 # Khanfar TX v2
 *Developed by Khanfar Systems*
 
+![Screenshot 2024-12-16 171244](https://github.com/user-attachments/assets/55e57ba0-6264-493e-a0f9-0439cd842c58)
+
+
+
+
 A powerful remote control GUI for rpitx, enabling wireless RF transmission control through SSH.
 
 ## Features
