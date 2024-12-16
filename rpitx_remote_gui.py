@@ -20,7 +20,10 @@ class RpitxRemoteGUI:
             "username": "mwk",
             "password": "",
             "rpitx_path": "/home/mwk/rpitx",
-            "frequency": 434.0
+            "frequency": 434.0,
+            "chirp_bandwidth": 60000,
+            "chirp_speed": 10,
+            "saved_presets": []
         }
         
         self.load_settings()
@@ -84,6 +87,62 @@ class RpitxRemoteGUI:
         self.freq_entry = ttk.Entry(freq_frame)
         self.freq_entry.insert(0, str(self.settings["frequency"]))
         self.freq_entry.grid(row=0, column=1, padx=5)
+        
+        # Chirp Settings Frame
+        self.chirp_frame = ttk.LabelFrame(self.root, text="Chirp Settings", padding=10)
+        self.chirp_frame.grid(row=1, column=1, padx=10, pady=5, sticky="nsew", rowspan=2)
+        
+        ttk.Label(self.chirp_frame, text="Bandwidth (Hz):").grid(row=0, column=0, sticky="w")
+        self.bandwidth_var = tk.StringVar(value=str(self.settings["chirp_bandwidth"]))
+        self.bandwidth_spinbox = ttk.Spinbox(
+            self.chirp_frame, 
+            from_=1000, 
+            to=10000000,
+            increment=1000,
+            textvariable=self.bandwidth_var,
+            width=10
+        )
+        self.bandwidth_spinbox.grid(row=0, column=1, padx=5, pady=2)
+        
+        ttk.Label(self.chirp_frame, text="Speed (s):").grid(row=1, column=0, sticky="w")
+        self.speed_var = tk.StringVar(value=str(self.settings["chirp_speed"]))
+        self.speed_spinbox = ttk.Spinbox(
+            self.chirp_frame, 
+            from_=1, 
+            to=60,
+            increment=1,
+            textvariable=self.speed_var,
+            width=10
+        )
+        self.speed_spinbox.grid(row=1, column=1, padx=5, pady=2)
+        
+        # Add buttons for quick adjustments
+        ttk.Button(self.chirp_frame, text="↑", width=2, 
+                  command=lambda: self.adjust_bandwidth(1000)).grid(row=0, column=2)
+        ttk.Button(self.chirp_frame, text="↓", width=2, 
+                  command=lambda: self.adjust_bandwidth(-1000)).grid(row=0, column=3)
+        
+        ttk.Button(self.chirp_frame, text="↑", width=2, 
+                  command=lambda: self.adjust_speed(1)).grid(row=1, column=2)
+        ttk.Button(self.chirp_frame, text="↓", width=2, 
+                  command=lambda: self.adjust_speed(-1)).grid(row=1, column=3)
+            
+        # Preset Controls
+        preset_frame = ttk.Frame(self.chirp_frame)
+        preset_frame.grid(row=2, column=0, columnspan=4, pady=10)
+        
+        ttk.Button(preset_frame, text="Save Current Settings", 
+                  command=self.save_current_settings).grid(row=0, column=0, padx=5)
+        
+        self.preset_var = tk.StringVar()
+        self.preset_combo = ttk.Combobox(preset_frame, textvariable=self.preset_var)
+        self.preset_combo.grid(row=0, column=1, padx=5)
+        self.update_preset_list()
+        
+        ttk.Button(preset_frame, text="Load", 
+                  command=self.load_preset).grid(row=0, column=2, padx=5)
+        ttk.Button(preset_frame, text="Delete", 
+                  command=self.delete_preset).grid(row=0, column=3, padx=5)
         
         # Transmission Modes Frame
         modes_frame = ttk.LabelFrame(self.root, text="Transmission Modes", padding=10)
@@ -348,13 +407,115 @@ class RpitxRemoteGUI:
         except:
             self.root.destroy()
 
+    def adjust_bandwidth(self, delta):
+        try:
+            current = int(self.bandwidth_var.get())
+            new_value = max(1000, min(10000000, current + delta))
+            self.bandwidth_var.set(str(new_value))
+        except ValueError:
+            self.bandwidth_var.set("60000")
+            
+    def adjust_speed(self, delta):
+        try:
+            current = int(self.speed_var.get())
+            new_value = max(1, min(60, current + delta))
+            self.speed_var.set(str(new_value))
+        except ValueError:
+            self.speed_var.set("10")
+
+    def save_current_settings(self):
+        try:
+            name = simpledialog.askstring("Save Settings", "Enter name for these settings:")
+            if not name:
+                return
+                
+            # Get current settings
+            preset = {
+                "name": name,
+                "frequency": float(self.freq_entry.get()),
+                "chirp_bandwidth": int(self.bandwidth_var.get()),
+                "chirp_speed": int(self.speed_var.get())
+            }
+            
+            # Add to saved presets
+            self.settings["saved_presets"] = [p for p in self.settings["saved_presets"] if p["name"] != name]
+            self.settings["saved_presets"].append(preset)
+            self.save_settings()
+            
+            # Update combo box
+            self.update_preset_list()
+            self.preset_var.set(name)
+            
+            messagebox.showinfo("Success", f"Settings saved as '{name}'")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
+            
+    def update_preset_list(self):
+        presets = [p["name"] for p in self.settings["saved_presets"]]
+        self.preset_combo["values"] = presets
+        
+    def load_preset(self):
+        try:
+            name = self.preset_var.get()
+            if not name:
+                return
+                
+            # Find preset
+            preset = next((p for p in self.settings["saved_presets"] if p["name"] == name), None)
+            if not preset:
+                return
+                
+            # Apply settings
+            self.freq_entry.delete(0, tk.END)
+            self.freq_entry.insert(0, str(preset["frequency"]))
+            
+            self.bandwidth_var.set(str(preset["chirp_bandwidth"]))
+            self.speed_var.set(str(preset["chirp_speed"]))
+            
+            messagebox.showinfo("Success", f"Loaded settings '{name}'")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load settings: {str(e)}")
+            
+    def delete_preset(self):
+        try:
+            name = self.preset_var.get()
+            if not name:
+                return
+                
+            if messagebox.askyesno("Confirm Delete", f"Delete settings '{name}'?"):
+                # Remove preset
+                self.settings["saved_presets"] = [p for p in self.settings["saved_presets"] if p["name"] != name]
+                self.save_settings()
+                
+                # Update combo box
+                self.update_preset_list()
+                self.preset_var.set("")
+                
+                messagebox.showinfo("Success", f"Deleted settings '{name}'")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete settings: {str(e)}")
+
     # Transmission mode implementations
     def run_tune(self):
         self.execute_command("./testvfo.sh {freq_hz}")
         
     def run_chirp(self):
-        self.execute_command("./testchirp.sh {freq_hz}")
-        
+        try:
+            freq_hz = int(float(self.freq_entry.get()) * 1e6)
+            bandwidth = int(self.bandwidth_var.get())
+            speed = int(self.speed_var.get())
+            
+            # Use original pichirp command with our parameters
+            command = f"./pichirp {freq_hz} {bandwidth} {speed}"
+            self.execute_command(command)
+        except ValueError as e:
+            messagebox.showerror("Error", "Invalid frequency, bandwidth, or speed value")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start chirp: {str(e)}")
+            
     def run_spectrum(self):
         file_path = filedialog.askopenfilename(filetypes=[("JPEG files", "*.jpg")])
         if file_path:
@@ -405,9 +566,33 @@ class RpitxRemoteGUI:
                 self.execute_command(f"./testsstv.sh {{freq_hz}} {remote_path}")
             
     def run_pocsag(self):
-        message = simpledialog.askstring("POCSAG Message", "Enter message:")
-        if message:
-            self.execute_command(f"./testpocsag.sh {{freq_hz}} '{message}'")
+        try:
+            # Get message from user
+            message = simpledialog.askstring("POCSAG Message", "Enter message:")
+            if not message:
+                return
+                
+            # Sanitize message to prevent command injection
+            message = message.replace("'", "").replace('"', "").replace(";", "")
+            
+            # Get frequency in Hz
+            freq_hz = int(float(self.freq_entry.get()) * 1e6)
+            
+            # Create temp file for message
+            remote_msg_path = f"/home/{self.settings['username']}/rpitx/temp/pocsag_msg.txt"
+            
+            # Write message to remote file
+            stdin, stdout, stderr = self.ssh.exec_command(f"echo '{message}' > {remote_msg_path}")
+            stdout.channel.recv_exit_status()
+            
+            # Run POCSAG with proper parameters
+            command = f"cat {remote_msg_path} | ./pocsag -f {freq_hz}"
+            self.execute_command(command)
+            
+        except ValueError as e:
+            messagebox.showerror("Error", "Invalid frequency value")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send POCSAG message: {str(e)}")
             
     def run_opera(self):
         callsign = simpledialog.askstring("Opera Callsign", "Enter callsign:")
